@@ -1,0 +1,561 @@
+# Sharpino
+
+
+<img src="ico/sharpino.png" alt="drawing" width="50"/>
+
+
+## A little F# Event Sourcing Library
+
+[![NuGet version (Sharpino)](https://img.shields.io/nuget/v/Sharpino.svg?style=flat-square)](https://www.nuget.org/packages/Sharpino/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## What is Event Sourcing?
+- Event sourcing is a design pattern for persisting the state of an object by storing the sequence of events that have occurred on the object.
+- Event sourcing fits the functional paradigm as the state is defined by an evolve function that is a pure function of the initial state and the events.
+
+## What is Sharpino?
+
+Sharpino is a library to support Event-Sourcing in F# based on the following principles:
+- PostgresSQL-based event store to register events and snapshots.
+- In-memory event store to speed up the tests.
+- Optimistic lock based on event_id: checking the first available event_id position on the basis of the event_id passed by the command handler to the event store.
+- Multiple streams transactions: executing multiple commands involving different aggregates as single db transactions.
+- StateViewer: A non-pure function to get the current state of any aggregate or context. StateViewers probe the cache and, in case of a cache miss, look into the event store to apply the "evolve" on the latest snapshot and subsequent events.
+- HistoryStateViewer: The same as the StateViewer, including also the state of an object that was softly deleted.
+- Soft delete: Mark an aggregate as deleted.
+- GDPR: Overwrite/clear/reset snapshots and events in case a user asks to delete their data.
+- Fire events to a message queue (RabbitMQ).
+- Listeners for messages will provide StateViewers as they interpted and process those messages
+- Messages are fired after the events are stored.
+- Messages can be of type InitialState, Events, Deletion
+
+## Goals
+- Using F# in idiomatic way for domain modelling and event sourcing in a .NET solution, particularly in the backend.
+- Multilanguage environment and architecture (a template using Blazor with C# on front end and F# on backend is given).
+- Avoid impedance mismatch between the domain and the database, so objects don't need to know about the database column mapping.
+
+## Overview and terms
+
+- Contexts (_deprecated: just use ordinary aggregates with a constant Id_) _Event-sourced objects with no Id, so only one instance is around for each type. 
+- Aggregates: Event-sourced objects with Id (Guid).
+- Multiple streams transactions: executing multiple commands involving different aggregates as single db transactions.
+- Transformation members of any object of type 'A use this signature: 'A -> Result<'A, string>'.
+- Events are based on D.U. and are wrappers to transformation events, i.e. processing events means calling the transformation members.
+- Commands are also based on D.U. and generate lists of events and, optionally, "unders" that will return a function to produce a list of compensating events (in the future).
+- Cache: use of MemoryCache to keep the latest state of any aggregate or context.
+- CacheDetails: use of MemoryCache to keep the state of details (combination of values from other aggregates or streams) and update them when the related aggregates are updated.
+- Soft delete: Mark an aggregate as deleted.
+- StateViewer: A non-pure function to get the current state of any aggregate or context. StateViewers probe the cache and, in case of a cache miss, look into the event store to apply the "evolve" on the latest snapshot and subsequent events.
+- HistoryStateViewer: The same as the StateViewer, including also the state of an object that was softly deleted.
+- GDPR: Overwrite/clear/reset snapshots and events in case a user asks to delete their data.
+- EventStore is based on PostgreSQL to store events and snapshots.
+- SQLTemplates: scripts to create tables for events and snapshots for any aggregate/context and format (bytea or text/JSON).
+- Optimistic lock based on event_id: Checking the available position to store new events on the basis of the event_id used to execute the command and passed by the command handler to the event store (if matching fails then no events are stored).
+- In-memory event store: an in-memory cache of events and snapshots that can be used to speed up the tests.
+- JSON or binary serialization for events and snapshots. The serialization mechanism is up to the user. The examples included use FsPickler to serialize/deserialize events and snapshots in binary or JSON. The JSON fields are plain text fields on the DB. They could be JSON or JSONB fields (with no significant advantages - and a little overhead - as there are no query of the content of JSON fields).
+- Evolving/refactoring aggregates by keeping backward snapshot read compatibility with upcasting.
+- Commands and events avoid versioning or upcasting. Just adding new events is the practice to extend the functionality related to events.
+- By default, the "evolve" function skips events that may produce an invalid state. There is an alternative evolve function that can't skip events that may produce invalid states.
+- In regard to the previous point: Because of the optimistic lock, the Event store should __never__ store events that produce an invalid state (and if it happens it means that the optimistic lock failed, which is practically unlikely).
+- Creation of any aggregate is based on generating an initial snapshot. Deletion is based on generating a new snapshot with the deleted field set to true and on the invalidation of the related cache entry.
+  There may also be events associated with the creation and deletion of aggregates, but they are not needed.
+- Contexts don't need creation nor deletion. They declare an initial state by a static Zero member.
+- MessageSenders: can be set to NoSender or to a MessageSender that, given the name of a stream, returns a ValueTask that can be used to send messages to a message bus: examples with RabbitMQ are provided.
+
+### Issues
+- A [temporary list of issues](https://github.com/tonyx/Sharpino/issues)
+## Projects
+__Sharpino.Lib.Core__:
+
+- [Core.fs](Sharpino.Lib.Core/Core.fs): Abstract definition of _Events_, _Commands_ and _Undoer_ (or compensator), definition of "evolve" function for aggregates and contexts to compute the next state given the current state and a list of event.
+
+__Sharpino.Lib__:
+
+- [CommandHandler.fs](Sharpino.Lib/CommandHandler.fs): Gets and stores snapshots, executes commands, and produces and stores events passing them to the __event store__.
+- [PgEventStore.fs](Sharpino.Lib/PgEventStore.fs) and [MemoryStorage.fs](Sharpino.Lib/MemoryStorage.fs): Manages persistence of events in Postgres or in-memory respectively using string encoding (usually JSON)
+- [PgBinaryEventStore.fs](Sharpino.Lib/PgBinaryEventStore.fs): Manages persistence of events in Postgres using binary encoding (examples are based on Fspickler external lib)
+- [Cache.fs](Sharpino.Lib/Cache.fs). Caches the current state of contexts or aggregates.
+
+
+## How to use it
+- Sharpino samples provide dbmate template files to set up the Postgres database for the event store.
+- A proper .env file must be set up with the DATABASE_URL environment variable to connect to the Postgres database with a connection string.
+- If the db is properly set then you can run all the samples by:
+```bash
+runTests.sh
+```
+- Equivalent .bat windows script would be trival to implement from the .sh
+- You can run single examples by locating the project (or test project) of any example and running it having set the .env file in the root of the project.
+- Note: in this way you need to make sure the postgres based event store is up and running.
+- Otherwise, you may have to dig into the examples and exclude any postgres based examples (by commenting out at most one line in the test files) allowing in memory eventstore test only.
+- Some examples can use the combination of postgres and rabbitmq by the following command (in the proper subproject directory)
+- Check the .fsproj file of the project to see if it uses rabbitmq or not.
+```bash
+    dotnet run --configuration:rabbitmq
+```
+
+- Rabbitmq must be up and running to run the examples that use it.
+- Rabbitmq can be launched in a different window by using the following command:
+```bash
+    rabbitmq-server
+```
+
+ 
+## How to contribute
+Please read the [CONTRIBUTING.md](CONTRIBUTING.md) for all the information about how to contribute to the project.
+
+Or you can run the test in the single directories.
+
+__Faq__ and __trivia__:
+- Why the name "Sharpino"?
+    - It's a mix of "Sharp" (as the '#' of  C# or F#) and fino (Italian for "thin").  "sciarpino" (same pronunciation) in Italian means also "little scarf".
+- Why another event-sourcing library?
+    - I wanted to study the topic, I also use it in a project for fun and hopefully profit (not listed: ask me for reference in case).
+- Why F#?
+    - Any functional language of the ML family language in my opinion is a good fit for event-sourcing for the following reasons:
+        - Events are immutable, building the state of the context is a function of those events.
+        - Discriminated Unions are suitable to represent events and commands.
+        - It is a .net language, so you can use everything in the .net ecosystem (including C# libraries).
+- How to use it
+    - add the nuget package Sharpino to your project.
+    - note: if you gets in a setup errors like  "A function labeled with the 'EntryPointAttribute' attribute must be the last declaration" then you may fix by adding this line in the .fsproj file:
+    ```xml
+    <GenerateProgramFile>false</GenerateProgramFile>
+    ```
+- How does it compare with other functional event-sourcing libraries?
+    - I can't be exaustive, but few comparisons in basic examples are the following respect to the [Equinox](https://github.com/jet/equinox) library.
+        - [Counter in Sharpino](https://github.com/tonyx/SharpinoCounter3)
+        - [Counter in Equinox](https://github.com/jet/equinox/blob/master/samples/Tutorial/Counter.fsx)
+        - [Invoices in Sharpino](https://github.com/tonyx/sharpinoinvoices)
+        - [Invoices in Equinox](https://github.com/nordfjord/minimal-equinox/tree/main)
+
+      ```
+- Is there any template for a "full stack" walking skeleton?
+    - For a walking skeleton using C# on the front end (via blazor):  [Sharpino.Blazor.Template](https://github.com/tonyx/sharpinoBlazor)
+    - The numbered examples provided in the library can be used as a starting point. I'd suggest to use the latest ones.
+- How to handle "projections"?
+    - It is possible to use "details" as a way to handle the composition of information coming from aggregates and events. The examples provided prefer to use directly the aggregates state (which is efficient by using the cache) s state (which is efficient by using the cache).
+    - Events can be queried directly to retrieve any projections (i.e. "ephemeral views"), however the user may need to do some work to be efficient.
+    - More complex projections (i.e. "materialized views") may need some work to be efficient in the same way the aggregates are.
+- Why caring about cross streams transactions and cross aggregates invariants (instead of just ruling them out)?
+    - New business rules may imply new invariants that can escape the constraints of the current structure of aggregates anyway. 
+- Other questions? Just opened a discord channel: https://discord.com/channels/1274092774643339315/
+
+## Acknowledgements
+
+A heartfelt thank you to  [Jetbrains](https://www.jetbrains.com) who have generously provided free licenses to support this project.
+
+## Upcasting techniques.
+
+In this section, I will describe the upcasting techniques that any application may use to allow read snapshots in old format.
+Goal: using upcast techniques to be[StateView.fs](Sharpino.Lib/StateView.fs) able to read the old (serialized) version of typeX into a new version of it.
+1. The following premise must be true: If you clone any TypeX into a new one with only a different name (example: TypeX001), then your serialization technique/library must be able to read any stored serialized instance of typeX and get the equivalent instance of TypeX001, so it will be able to indifferently have TypeX and TypeX001 as the target for deserialization (some libraries may allow this out of the box, some other may need some extra config/tuning and/or specific converters).
+2. Now you can make some changes to TypeX that make it different from the old TypeX/TypeX001 (example: add new property) making sure that there exists a proper logical conversion (or better: "isomorphic immersion" if you like algebraic terms) from the old TypeX (i.e. TypeX001) into the new TypeX.
+3. Define the Upcast function/instance member form TypeX001 that actually implements that conversion from an instance of the old typeX to an instance of the new typeX.
+4. Define a "fallback" action in the deserialization related to the new TypeX so that it can, in case of failure because of encountering an old TypeX/TypeX001, apply the deserialization obtaining a typeX001 instance and use its Upcastor to get, finally, the equivalent instance of TypeX.
+
+- Now you can deploy the new version and in case the code tries to read an old TypeX/TypeX001 it must be able to correctly interpret it as the new TypeX by adopting the following steps in deserialization of the existing snapshot:
+- try to read and deserialize it as TypeX
+- if Ok then Ok
+- if it fails try to read it as TypeX001 and then upcast to TypeX
+
+5. If it is not expensive, transform any snapshot of old typeX/TypeX001 into the new TypeX in one shot: make a massive upfront aggregate upcast and re-snapshot: retrieve all the existing current state of aggregates of old TypeX/TypeX001 (that will do upcast under the neaths) and generate and store snapshots for all of them so that those snapshot will surely respect the format of the new TypeX. After doing it, assume that the fallback action of reading old versions and then upcasting will never be necessary again and that part of the code can be simply deleted from TypeX.
+6. If you decided not to do the previous step 5 or if there is the possibility that you'll need to downgrade the new TypeX again to the previous TypeX001 (which would mean creating a "downcastor" making essentially the reverse of the Upcast process described), then keep the older typeX (or TypeX001) for a while so you will still be able to upcast "on the fly" any older typeX and you will also are prepared to eventually downgrade/downcast again. Note that keeping the TypeX001 around for a long time means that a further upgrade may complicate things as you may have to go deeper in having more older versions in the form of TypeX002, with a more complicated and error-prone recursive chain of fallback/upcast among older versions. So rather you will prefer to doing the full step 7 to make sure that the upgrade will affect all the snapshots.
+7. Last but not least. Having events that depend strictly on the old type X format could be a problem because you don't know if that may imply the necessity to change/upcast also the events, or just test the hypothesis that events based on typeX (say Event.Update (x: Type/X)) can be correctly parsed if TypeX changes. If not, then just don't use TypeX as an argument for whatever event.
+
+## News/Updates
+- Made some append tests compared with Uma.Db. [Sharpino is slightly faster](https://github.com/tonyx/sharpinoVsUmaDbTest). 
+- Published a short paper: [Dynamic Consistency Boundaries in Event Sourcing via Multi-Stream Optimistic Concurrency Control](https://zenodo.org/records/21157057)
+- Version 6.1.1: Added modified versions of runThreeAggregateCommandsMdAsync2 etc ... called runThreeAggregateCommandsMdAsync3 with the lazy contraint accepting ct instead of unit.
+- Version 6.1.0: Added runThreeAggregateCommandsMdAsync2, runAggregateCommandMdAsync2, forceRunTwoNAggregateCommandsMdAsync2, runTwoNAggregateCommandsMdAsync2,forceRunThreeNAggregateCommandsMdAsync2,  runThreeAggregateCommandsMdAsync2 accepting an extra crossAggregatesConstraint parameter which contains a lambda that evaluates evantual constraints involving any aggregate _outside_ the ones of the commands. If the conditions are met, then we have a map containing the eventId, aggregateId and streamnames of those external aggregates so that they will be used by the event store to extend the optimistic lock control when writing the events. In this way the decision boundary scope can include aggregates outside of the scope of the passed aggregateids involved by the command. See Sharpino.Sample.9 for a use case. 
+Recap: business rules that implies decisions that are outside of the scope of aggregates of the commands can be protected. _Important_: they need new pgsql functions: see the checkLastEventId.sql and the definition of insert_md{Version}{AggregateStorageName}_aggregate_event_and_return_id_opt_lock2. We need to add on the database the checkLastEventId and then later the  insert_md{Version}{AggregateStorageName}_aggregate_event_and_return_id_opt_lock2 for any aggregate stream.
+ 
+- Version 6.0.6: Aggregates don't need to define the SnapshotsInterval static member anymore as the value is given by the DitanceBetweenSnpashots in appsettings.json (if it is missing then the default 100 is used). 
+- Version 6.0.5: L2 cache can use PostgreSQL. Eviction messages to/from L1 caches can be sent/received using PostgreSQL LISTEN/NOTIFY. See example 27
+- Version 6.0.4:  new cache configuration options for limiting memory/eviction. New configuration options for controlling the cache memory usage:
+
+- - `Cache:AggregateCacheMaxSize (int, default: 1000)` - maximum number of items. Set to -1 or 0 to disable count limit.
+- - `Cache:AggregateCacheMaxMemoryMegabytes (int, default: 0 [disabled])` - maximum private working set memory in MB for the process.
+- - `Cache:AggregateCacheMemoryLoadThreshold (double, default: 0.85 [85%])` - maximum allowed system-wide memory load percentage before eviction begins. Set to 0.0 to disable.
+- - `Cache:AggregateCacheMinEvictBatchSize (int, default: 10)` - number of elements to evict at once when memory thresholds are hit, reducing frequent checks.
+
+- Version 6.0.3: async versions of preExecuteAggregateCommand (experimental: it may have issues with the event_id based optimistic lock)
+- Version 6.0.2: instrumented the details cache to fire some action/callback on refresh. This allows an application to trigger any "side effect" on refreshes (example: publishing a message to a signalr hub).
+- Version 6.0.1: optimized and used async in calls to get the distance from latest snapshot 
+- Version 6.0.0: Optimistic lock control switched to psql. Note: any use of forceXXX command group will log an error and may fail if non distinct aggregate ids are passed. The clean way to face the situation is transforming multiples commands hitting the same aggregate Id with a new single command behaving like repeated execution of more commands on same aggregate. It is acceptable even if it ends up in different length of aggregateIds passed as first and second group of aggregate-commands. Benefit is that  invalidating the cache (because of "conflicting" commands) will not be needed anymore. Example 7 (for the moment) shows the new behavior. 
+- Any aggregate type will need the following new stored procedure template (sustitute {Version} and {AggregateStorageName}).
+Use ``dbma new alter_name0f_stream` to create and edit the new stream, then `dbmate up` to feed the sql
+provided that DATABASE_URL points to the db:
+```sql
+CREATE OR REPLACE FUNCTION insert_md{Version}{AggregateStorageName}_aggregate_event_and_return_id_opt_lock(
+    IN event_in {Format},
+    IN aggregate_id uuid,
+    IN distance_from_latest_snapshot int,
+    IN md text,   
+    IN last_event_id int
+)
+RETURNS int
+    
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    inserted_id integer;
+    event_id integer;
+    found_last_event_id integer;
+BEGIN
+    SELECT id INTO found_last_event_id 
+    FROM events{Version}{AggregateStorageName} 
+    WHERE events{Version}{AggregateStorageName}.aggregate_id = insert_md{Version}{AggregateStorageName}_aggregate_event_and_return_id_opt_lock.aggregate_id 
+    ORDER BY id DESC LIMIT 1;
+
+    IF last_event_id = 0 THEN
+        IF found_last_event_id IS NOT NULL THEN
+            RAISE EXCEPTION 'Optimistic locking check failed: expected no previous events, but found event %', found_last_event_id;
+        END IF;
+    ELSIF last_event_id > 0 THEN
+        IF found_last_event_id IS NULL OR found_last_event_id <> last_event_id THEN
+            RAISE EXCEPTION 'Optimistic locking check failed: expected last event id %, but found %', last_event_id, found_last_event_id;
+        END IF;
+    END IF;
+
+    event_id := insert_md{Version}{AggregateStorageName}_event_and_return_id(event_in, aggregate_id, distance_from_latest_snapshot, md);
+
+    INSERT INTO aggregate_events{Version}{AggregateStorageName}(aggregate_id, event_id)
+    VALUES(aggregate_id, event_id) RETURNING id INTO inserted_id;
+    return event_id;
+END;
+$$;
+
+```
+- Version 5.0.5: Big Snapshots upcast at event store level. Upcast an old snapshot means to upcast the snapshot and replace the old snapshot with the equivalent in the new format.
+- Version 5.0.4: GDPR update snapshots and events async versions.
+- Version 5.0.3: GDPR Partial Update Snapshots, events replace for snapshots and events containing sensible data. 
+  Is preferrable to keep sensible data away from the event store, but if they are there for watever reasons, then they must be also replecable somehow.
+  Technical constraints. 1: Any event replaced must return an Ok (applied on the state related to the event that is immediately preceeding it in the event stream). 2: The partial snapshot replacement must be consistent with the event stream. 3. The AggregateCache3 entry related to the involved aggregate must be cleared. This applies also to any details cache (projections based on that aggregate). 
+- Version 5.0.2: fixes 5.0.1 and 5.0.0
+- Version 5.0.1: removed Async.AwaitTask in many task based operations for better performance: it may require adjusting the database pool size. Example: `Maximum Pool Size=60` on the connectionString.
+- Version 5.0.0: Adjust the details cache by using `RefreshableAsync<'A>` interface instead of `Refreshable<'A>`. __Not backward compatible__ for the details cache part. Hint: The upgrade consist mainly in using taskResult  c.e. instead of Result to wrap the refresher function and  getting rid of Async.AwaitTask inside it. Some examples follow the new interface (even some more comprehensive ones with better explanations will follow).
+- A tech stack blue print meant to feed A.I. agents to help code generation with a blazor+sharpino architecture [blazorBookLibrary](https://github.com/tonyx/blazorBookLibrary/blob/main/Docs/Tech_Stack_Blueprint.md). Note: the book library has to be used just as an example, A.I. agents should be able to generate the code for whatever domain you give them, by using the tech stack and the constraints described in the blue print.
+- [New example](https://github.com/tonyx/blazorBookLibrary), with link to a live demo: a book library management system (WIP)
+- Version 4.9.4: rearranged cancellation token handling in aggregate state retrieval functions to depend only on config files, make sure that you can substantially prevent timeout if you want to.
+- Version 4.9.3: changed some loops in EventStore to be non recursive
+- Version 4.9.2: added few async version of multiple aggregate commands run, started eliminating the checks static NapshotsInterval definition (to be eliminated in the very next future)
+- Version 4.9.1: fixed getAggregateFreshStateAsync (temporary async workaround, not too bad as we stay in the async way of chain of calls)
+- Version 4.9.0: fixes issue #60. https://github.com/tonyx/Sharpino/issues/60
+- Version 4.8.9: added runDeleteAsync
+- Version 4.8.8: added getAllFilteredAggregateStatesAsync which uses a predicate to filter the results
+- Version 4.8.6: added runTwoNAggregateCommandsMdAsync. Added (under comments) track of future async version of details (with cache interaction)
+- Version 4.8.5: fix on optmistic lock control in SetInitialAggregateStateAndAddEventsMdAsync (issue #58). Add SetInitialAggregateStateAndMultiAddAggregateEventsMdAsync. (note: those kind of multi-streams function bring complexity that will be abandoned and replaced with more standard approaches, including single streams with compensation events, projections, and "details").
+add getAggregateFreshStateAsync. (The "async" versions of existing functions is needed for a modern scalable approach using cancellation tokens and thread pool optimization). This looks a way to proliferate the nasty "multiple streams" commands. That's right: will clean up stuff, by removing the need to use the "multiple streams" commands.
+- Version 4.8.4: add SetInitialAggregateStateAndAddAggregateEventsMdAsync. (The "async" versions of existing functions is needed for a modern scalable approach using cancellation tokens and thread pool optimization). This looks a way to proliferate the nasty "multiple streams" commands. That's right: will clean up stuff, by removing the need to use the "multiple streams" commands.
+- Version 4.8.2: added getAggregateFreshStateAsync.  Some existing tests have their equivalent "async" version as well
+- Version 4.8.1: added more "async" with cancellation token CommandHandler functions. Added a specific expiration time for L2 (Azure Sql) cache, which should be short lived, shorter than L1. Added case of "refreshable details" in example22 to check that details will be in sync with values coming from L1 cache. At the moment it seems to work as expected. More tests are needed to try to break it.
+- Version 4.7.9: some fixes about sql L2 cache + Service bus (see example 22 for setup working example with dockerized pgSql eventstore,  Azure sql l2 cache + service bus for invalidation messages)
+- Version 4.7.8: changes/fix to the snapshot making logic to compute correctly the interval between snapshots for a single aggregate. It needs a patch for backward compatibility. Following steps are needed for existing applications:
+1. A new optional parameter in appSettings.json specifies the distance (in number of events) between snapshots:
+```
+  "DistanceBetweenSnapshots": 100,
+```
+- - This makes obsolete the static member SnapshotsInterval defined for aggregate level (which cannot be removed, yet)
+
+2. A patch to any existing sql table is needed. Here is an example of that patch. Instead of _01 you place the Version (tipically _01) and instead of _course you place the value of the static member StorageName defined at aggregate level 
+```
+    ALTER TABLE public.events_01_course ADD COLUMN distance_from_latest_snapshot int;
+
+    CREATE OR REPLACE FUNCTION insert_md_01_course_event_and_return_id(
+        IN event_in bytea,
+        IN aggregate_id uuid,
+        IN distance_from_latest_snapshot int,
+        IN md text
+    )
+    RETURNS int
+
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+    inserted_id integer;
+    BEGIN
+    INSERT INTO events_01_course(event, aggregate_id, distance_from_latest_snapshot, timestamp, md)
+    VALUES(event_in::bytea, aggregate_id, distance_from_latest_snapshot, now(), md) RETURNING id INTO inserted_id;
+    return inserted_id;
+    END;
+    $$;
+
+    CREATE OR REPLACE FUNCTION insert_md_01_course_aggregate_event_and_return_id(
+        IN event_in bytea,
+        IN aggregate_id uuid,
+        IN distance_from_latest_snapshot int,
+        IN md text   
+    )
+    RETURNS int
+        
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+    inserted_id integer;
+        event_id integer;
+    BEGIN
+        event_id := insert_md_01_course_event_and_return_id(event_in, aggregate_id, distance_from_latest_snapshot, md);
+
+    INSERT INTO aggregate_events_01_course(aggregate_id, event_id)
+    VALUES(aggregate_id, event_id) RETURNING id INTO inserted_id;
+    return event_id;
+    END;
+$$;
+
+```
+
+- - At typical way to apply the patch is generating it using
+
+- - `dbmate new alter_mytable`
+insert the SQL statements provided above by changing the version (_01) and storagename (_student) leaving the lines --migrate:up on top and --migrate:down on botton.
+
+- - `dbmate up`
+
+- -  should work seamlessy, but a prelimianry test in a controlled environment and a database backup is strongly adviced.
+
+
+- Version 4.7.7: using ZiggyCreatures.FusionCache with Azure Sql Server as distributed cache and Azure Message Bus to propagate cache related events (see Sharpino.Sample.19).
+- Version 4.7.6: using ZiggyCreatures.FusionCache instead of MemoryCache
+- Version 4.7.5: optimize the getAllAggregateStates and getAllAggregateStatesAsync by filtering out the (soft) deleted aggregates using new db functions
+- Version 4.7.4: fix getAllAggregateStatesAsync and getAggregateStatesInATimeIntervalAsync are able to filter out deleted states from resut
+- Version 4.7.3: logging config is managed by appSettings.json. "setLogger" calls are deprecated.
+- Version 4.7.2: removed sharpinoSettings.json. Settings are part of appSettings.json now
+- Version 4.7.1: the "runPreExecuteAggregateCommd" can use the MessageSenders (RabbitMq for example). 
+- Version 4.7.0: interface "Aggregate" is not needed anymore. Type constraints are enough -> Related members Id and Serializer needs to be defined in the aggregate. Important: if using typed Id (wrapping Guid), then it cannot use the name Id anymore. The actual Id must be still Guid (so for example I can have a StudentId field of type StudentId and I still need to expose the Id as a Guid, like StudentId.Value)
+- Released a template with a minimal yml docker file for postgres if needed. https://github.com/tonyx/sharpinoTemplate 
+``dotnet install Sharpino.Templates``
+``dotnet new sharpino``
+- Version 4.6.3: handle task/CancellationToken in few more eventstore/stateview functions
+- Blogged [Event Sourcing in F#: From Cross-Stream Invariants to Refreshable Details](https://medium.com/@tonyx1/event-sourcing-in-f-from-cross-stream-invariants-to-refreshable-details-d5d6f7fd2dd8)
+- Version 4.6.1: handle CancellationToken "scope" (for implicit disposal) in pg(Binary)EventStore, added GetAllAggregateEventsInATimeIntervalAsync (ResizeArray based).
+- Version 4.6.0: added support for CancellationToken in StateView async functions and their related db functions
+- Version 4.5.8: added runInitAsync and runMultipleInitAsync to CommandHanldler and related db functions with optional CancellationToken.
+- Version 4.5.7: using console logging by default on Core.fs, update dependencies
+- Version 4.5.6: fix an update of refreshable/cachable details.
+- Version 4.5.5: added cachable details/view: a detailed view can be Refreshable and cachable, so that it refreshes when any of its object is updated (i.e. a related event is stored): [CACHING_DETAILS_VIEW.md](CACHING_DETAILS_VIEW.md)
+- Version 4.5.4: few more versions of eventstore functions handling task/cancellationToken
+- Version 4.5.3: removed some dupication in eventstore
+- Version 4.5.2: changed the definition of "undoer" in core (returning new state not only compensation events). Cleaned core a little. It may break existing code ("undoers" may need an update).
+- Version 4.5.1 fix async issues
+- Version 4.5.0 (deprecated): First step of introducing more async task based methods (with optional cancellationToken) on EventStore
+- Version 4.4.9: Replaced ConcurrentDictionary based cache with MemoryCache
+- Version 4.4.7: fix a problem of indexes in aggregateCache that was unoticed and harmless (until 4.4.6).
+- Version 4.4.6 (DEPRECATED. need fix): avoid an unnecessary access to last snapshot event id to get last aggregateSnapshot
+- Added an article on medium [F# Domain Model with Event Sourcing vs C# with Entity Framework](https://medium.com/@tonyx1/f-domain-model-with-event-sourcing-vs-c-with-entity-framework-ff870ce5c48c)
+- Version 4.4.4: added bulk object initializations
+- Version 4.4.3: added support for net10.0
+- Version 4.4.2: mkAggregateSnapshot is reintroduced (was dropped in 4.4.1)
+- Version 4.4.1: fixed [Avoid db call to get lastEventId before probing the cache](https://github.com/tonyx/Sharpino/issues/45). In the getAggregateFreshState the lastEventId is computed within the events involved in the "evolve" from last snapshot and not in a second step.
+- Version 4.4.0: added MessageSenders (replacing partially the old IEventBroker) to send events to a message bus after they have been stored. Some Rabbitmq examples are provided. (warning. There is no backward compatibility as the MessageSenders replaces IEventBroker)
+- Version 4.3.4: added more info in some error messages
+- Version 4.3.3: fix md parameter
+- Version 4.3.2: updated dependencies, fixed date error in pgBinaryEventStore
+- Version 4.3.1: reintroduced concurrent dictionary aggregate cache
+- Version 4.3.0: Aggregate Cache is type independent. Added a way to "preExecute" any type of commands and then send them to the command handler. So now executing an arbitrary number of command of any type is allowed (see example 10). Note: some adjustments in passing metadata to "delete" commands will make them non-backward compatible (just add metadata to the command to fix).
+- Version 4.2.3: concurrent dictionary aggregates cache
+- Version 4.2.1: added a variant of delete with aggregateCommand
+- Version 4.2.0: fixed again the delete's (tested only on an external application not included in the examples, sorry)
+- Version 4.1.8: some fixes on new features
+- Version 4.1.7: added an alternative to getAggregateFreshStater (getHistoryAggregateFreshState) that includes historical (i.e. deleted) aggregate and skip caching. No example or test provided (hack).
+- Version 4.1.6: added runDelete with aggregateCommand (see sample 9 for a use case)
+- Version 4.1.5: fixed dependencies declared in manifest/nuspec file
+- Version 4.1.4: added soft delete with predicate (usually predicate is: counter references must be zero). Needs at applicative level increment counter each time a reference is created and decrement it when the reference is removed (see sample 9). Warning: deletion is not an event! Is just a state of the latest snapshot of an aggregate. After carefully evaluated the pros and cons I decided in this way (hint: any independent stream evolving does not care if the reference of an external id does actually exist or not. Getting the state of any aggregate depends primarily on the latest snapshot. If that last snapshot is deleted then it is as if it doesn't exist anymore as long as also the caches is aware of this deletion i.e. it is invalidated).
+- an example of integration with Blazor: https://github.com/tonyx/sharpinoBlazor (a summary, in Italian, made by Gemini A. I.: https://g.co/gemini/share/528e98bd6dd8)
+- Version 4.1.3: fixed some SQL issues of new functions introduced in 4.1.1/4.1.2 (involving only new stuff)
+- Version 4.1.2: deprecated getFilteredAggregateStatesInATimeInterval, added getFilteredAggregateStatesInATimeInterval2, getAggregateStatesInATimeInterval, getAllAggregateStates
+- Version 4.1.1: event store:added GetAggregateIds and GetAggregateIdsInATimeInterval to event
+- Version 4.1.0: removed the saga-ish runCommands (as the "forceRun" equivalent versions of runCommands are enough)
+- Version 4.0.2: introduces Stateview.getFilteredAggregateStatesInATimeInterval
+- Version 4.0.0: same as 3.10.6, just restarting numeration.
+- Version 3.10.6: added runInitAndNAggregateCommandsMd on command handler (accepts an initial state of a new aggregate of a certain type and N aggregate commands related to a different type type providing _distinct_ aggregateIds) - it is has been tested on a private application. Feel free to add tests on examples (Sample 8 may be a good fit for it).
+- Version 3.10.5: skip the mailboxprocessor in running commands. Removing duplicate code in Pg based eventstore implementations. Fixed a bug of runThreeNAggregregateCommands in handling indexes (will take a closer look for the next release).
+- Version 3.10.3: in some cases forceRunTwo/ThreeNAggregateCommands skip caching.
+- Current version 3.10.2: added runInit that just create initial instance of an aggregate. I will use it to substitute runInitAndCommand to avoid "expansion" of the aggregate state in the cache. The use of MailboxProcesor for commands is based on a compile time constant as will be removed in the future.
+- (instead of stream level lock which ).
+- Added Example 8 related to the [transport-tycoon domain](https://github.com/trustbit/exercises/blob/master/transport-tycoon-1.md). It is a simple example of a transport company that manages vehicles and routes.
+- blogged [Sharpino Internals. Inside a functional event-sourcing-library, part 4](https://medium.com/@tonyx1/sharpino-internals-inside-a-functional-event-sourcing-library-part-4-284a9fe6372a)
+- Added Sharpino.Sample.7 which shows two equals solutions based on JSON and BINARY serialization respectively.
+- blogged [Sharpino Internals. Inside a functional event-sourcing-library, part 3](https://medium.com/@tonyx1/sharpino-internals-inside-a-functional-event-sourcing-library-part-3-c4a9edc81467)
+- Current version 3.0.9
+- Version 3.0.6: forceRunThreeNAggregateCommands has been improved (aggregates involved in more than one command uses a state that is the result of the previous command in the same transaction)
+- Version 3.0.5: forceRunNAggregateCommands has been improved (aggregates involved in more than one command uses a state that is the result of the previous command in the same transaction)
+- Version 3.0.4: forceRunTwoNAggregateCommands has been improved (aggregates involved in more than one command uses a state that is the result of the previous command in the same transaction)
+- Version 3.0.3: Fixed bug in multiple events writing in Postgres eventstore (a local branch of an incoming feature can reproduce this bub)
+- Version 3.0.2: StateCache substituted by StateCache2. Access cached contexts don't need checking lastEventId to the eventstore for comparison.
+- Version 3.0.0: some cache improvements, supporting net9.0 and net8.0 (ditched net7.0)
+- Version 2.7.7: The md field is mandatory for any event table: Any run(Aggregate)Commands are redirecting to the equivalent 'run(Aggregate)CommandsMd' that accepts metadata as a string.
+- Version 2.7.5: Can view history of events related to a set of aggregates in a time interval (StateView.getFilteredMultipleAggregateEventsInATimeInterval)
+- Version 2.7.4: A (quick)fix allows adding compensating events in pgEventstore in saga-ish that were rejected because of strict eventId control
+- Live example is here: [restaurant management system](https://orderssystem.azurewebsites.net) tech stack: Blazor as Front end, Sharpino as backend, Postgres as event store, Azure as hosting.
+
+- Version 2.7.2: Support metadata field in db (any command has the correspondent commandMd that accepts any string as metadata). Those metadata can be used for debugging purposes. To use them any event table in the db needs a new nullable text field called "md".
+  New db functions are also needed. See the functions like "insert_md{Version}{AggregateStorageName}_events_and_return_id" in the sql scripts in the SqlTemplate dir doing a proper substitution in {Version} and {Format} and {AggregateStorageName}. Similar function is in the ContextTemplate.sql.
+- Version 2.7.1: Bug fix
+- Version 2.6.8: Remove EventStoreDb and starting removing Kafka (for future rewrite or replacement).
+- Version 2.6.7: Optimize snapshotting by using the in-memory cached value to avoid multiple reads of the same aggregate.
+- Version 2.6.6: Can create new snapshots for aggregates that have no events yet (can happen when you want to do massive upcast/snapshot for any aggregate)
+- Version 2.6.4: the mkAggregateSnapshots and mkSnapshots are now public in commandhandler so that they can be used in the user application to create snapshots of the aggregates and contexts. This is userful after an aggregate refactoring update so that any application can do upcast of all aggregates and then store them as snapshots (and then foreget about the need to keep upcast logic active i.e. can get rid of any older version upcast chain).
+- Version 2.6.3: Stateview added  ```getFilteredAggregateSnapshotsInATimeInterval```which returns a list of snapshots of a specific type/version of aggregate in a time interval filtered by some criteria no matter if any context contains references to those aggregates, so you can retrieve aggregates even if no context has references to them (for instance "inactive users").
+- Version 2.6.2: CommandHandler, PgEventStore and PgBinaryEventstore expose as setLogger (newLogger: ILogger) based on the ILogger interface replacing Log4net. You can then pass that value after retrieving it from the DI container (straightforward in a .net core/asp.net app).
+- Version 2.6.0: Added a function for the GDPR in command handler able to virtuallty delete snapshots and events, i.e. replace any event with an events that returns an empty version of the state and also replace any snapshot with the voided/empty version of that state (and also fill the cache with that empty value).
+- Version 2.5.9: Added the possibility via StateView to retrieve the initial state/initial snapshot of any aggregate to allow retrieving the data that the users claims. So when users unsubscribe to any app then they have the rights to get any data. This is possibile by getting the initial states and any following event. I think it will be ok to give the user a json of the  initial snapshots and any events via an anonymous record and then let the use download that JSON.
+- Version 2.5.8: Added query for aggregate events in a time interval. StateView/Readmodel can use it passing a predicate to filter events (example: Query all the payment events). Aggregate should not keep those list ob objects to avoid unlimited grow.
+- A short pdf: [why do we need upcastors for aggregates and not for events](https://drive.google.com/file/d/1DKx8IXqakc14qjQbrymzwHAJQEbhxZGq/view?usp=share_link) (sorry for typos)
+- Blog post: [Upcasting aggregates in Sharpino](https://medium.com/@tonyx1/upcast-to-read-aggregates-in-an-older-format-in-a-sharpino-based-solution-839b807265f9)
+- Blog post: comparing the example of the "Counter" app in Equnox and in Sharpino https://medium.com/@tonyx1/equinox-vs-sharpino-comparing-the-counter-example-0e2bd6e9bbf2
+- Blogged [About Sharpino. An Event Shourcing library](https://medium.com/@tonyx1/about-sharpino-an-f-event-sourcing-library-dbadb4282ab9)
+- Version 2.5.4 added _runInitAndTwoAggregateCommands_ that creates a new aggregate snapshot and run two commands in a single transaction.
+- Version 2.5.3 added _runSagaThreeNAggregateCommands_ this is needed when transaction cannot be simultaneous for instance when it needs to involve the same aggregate in multiple commands.
+  (A short example will come but here is an idea, pretending the aggregate types can be two, and not three: A1, A2, A3, A3 needs to merge into An: I cannot run the "indpendent" saga-free version of running
+  multiple commands (pairs) because I should repeat the id of An many times which is invalid, so I run the saga version that executes the single "merge" i.e. merge A1 into An, then merge A2 into An etc...: if somethings goes wrong I have accuulted the "future undoers" that may rollback the eventually suffessful merges)
+
+- A "porting" of an example from Equinox https://github.com/tonyx/sharpinoinvoices
+- Version 2.5.2. add the runThreeNAggregateCommands (means being able to run simultaneusly n-ples of commands related to three different kind of aggregates)!
+- Kafka status: No update. Use the only database version of the events and the "doNothing" broker for (not) publishing.
+- Version 4.5.0 changed the signature of any command in user application. Commands  and AggregateCommands return also the new computed state and not only the related events. Example:
+```fsharp
+                | UpdateName name -> 
+                    dish.UpdateName name
+                    |> Result.map (fun x -> (x, [NameUpdated name]))
+
+```
+Any application needs a little rewrite in the command part (vim macros may be helpful).
+
+In this way the commandhandler takes advantage of it to be able to memoize the state in the cache, so that virtually
+the state will never be processed and at any state the cache will always be ready for the current state
+(unless the system restarts, and in that case the state will be
+taken by reading the last snapshot and processing the events from that point on).
+
+- Version 2.4.2: Added a constraints that forbids using the same aggregate for multiple commands in the same transaction. The various version of RunMultiCommands are not ready to guarantee that they can always work in a consistent way when this happens.
+- Disable Kafka on notification and subscribtion as well. Just use the "donothingbroker" until I go back on this and fix it.
+  This is a sample of the doNothingBroker:
+```fsharp
+    let doNothingBroker =
+        {
+            notify = None
+            notifyAggregate = None
+        }
+
+```
+- Version 2.4.0: for aggregate commands use the AggregateCommand<..> interface instead of Aggregate<..>
+  The undoer has changed its signature.
+
+Usually the way we run commands against multiple aggregate doesn't require undoer, however it may happen.
+Plus: I am planning to use the undoer in the future for the proper user level undo/redo feature.
+
+An example of the undoer for an aggregate is in the following module.
+Note: I try to avoid "undoer" that are meant to issue compensating events when two transactions are running in parallel and one fails
+and for any reason we decided to not use the cross aggregate transaction function in command handlers.
+The "undoers" are complex but still: they are in general not necessary (or if you want to suggest a way to simplify them it's fine).
+
+```fsharp
+module CartCommands =
+    type CartCommands =
+    | AddGood of Guid * int
+    | RemoveGood of Guid
+        interface AggregateCommand<Cart, CartEvents> with
+            member this.Execute (cart: Cart) =
+                match this with
+                | AddGood (goodRef, quantity) -> 
+                    cart.AddGood (goodRef, quantity)
+                    |> Result.map (fun s -> (s, [GoodAdded (goodRef, quantity)]))
+                | RemoveGood goodRef ->
+                    cart.RemoveGood goodRef
+                    |> Result.map (fun s -> (s, [GoodRemoved goodRef]))
+            member this.Undoer = 
+                match this with
+                | AddGood (goodRef, _) -> 
+                    Some 
+                        (fun (cart: Cart) (viewer: AggregateViewer<Cart>) ->
+                            result {
+                                let! (i, _) = viewer (cart.Id) 
+                                return
+                                    fun () ->
+                                        result {
+                                            let! (j, state) = viewer (cart.Id)
+                                            let! isGreater = 
+                                                (j >= i)
+                                                |> Result.ofBool (sprintf "execution undo state '%d' must be after the undo command state '%d'" j i)
+                                            let result =
+                                                state.RemoveGood goodRef
+                                                |> Result.map (fun _ -> [GoodRemoved goodRef])
+                                            return! result
+                                        }
+                                }
+                        )
+                | RemoveGood goodRef ->
+                    Some
+                        (fun (cart: Cart) (viewer: AggregateViewer<Cart>) ->
+                            result {
+                                let! (i, state) = viewer (cart.Id) 
+                                let! goodQuantity = state.GetGoodAndQuantity goodRef
+                                return
+                                    fun () ->
+                                        result {
+                                            let! (j, state) = viewer (cart.Id)
+                                            let! isGreater = 
+                                                // this check depends also on the number of events generated by the command (i.e. the j >= (i+1) if command generates 2 event)
+                                                (j >= i)
+                                                |> Result.ofBool (sprintf "execution undo state '%d' must be after the undo command state '%d'" j i)
+                                            let result =
+                                                state.AddGood (goodRef, goodQuantity)
+                                                |> Result.map (fun _ -> [GoodAdded (goodRef, goodQuantity)])
+                                            return! result
+                                        }
+                                }
+                        )
+ ```
+
+
+
+- Changes to the classic Blazor counter app to use Sharpino in the backend: https://github.com/tonyx/blazorCounterSharpino.git
+- Version 2.2.6: runCommands work in threads for aggregates and context using mailboxprocessors for aggregates (the number of those active mailboxprocessors can be limited in config)
+- Version 2.2.5: fix runCommand eventbroker notification.
+- Version 2.2.4: some changes in runCommand: no need to pass state and aggregateViewer as it will just use the ones based on the eventstore (source of truth). Supporting also net7.0. The "core" gets rid of TailCall attribute not compatible with net7.0.
+  There is the possibility that including Sharpino.Core must be explicitly included.
+  For an example of app that has been upagraded to the newest version of library see
+  [shopping cart](https://github.com/tonyx/shoppingCartWithSharpino.git)
+
+- Version 2.1.3: added local fork of [FsKafka](https://github.com/jet/FsKafka)  (with library dependencies updated) to be able to use it in the project.
+- Version 2.1.0: going to remove newtonsoft, introduced FsPickler, FsKafka, changed kafka publisher way (binary and textencoding). Removed Kafkareceiver. Preparing to replace it with one based on FSKafka
+- I am porting the examples to use the newer version (2.0.6). The porting of the first example(Sharpino.Sample) is incomplete (At the moment I disabled the "migrate between version" function in that example).
+- version 2.0.7: a fix in runThreeCommand. CommandHandler will just use fresh data ignoring the viewer that has been passed.
+
+- version 2.0.6:
+    - eventstore checks the eventId of the state that produces any event before adding them. That will ensure that events are added in the right order and cannot fail (so the optimistic lock stateId will
+      be superfluous and will be dropped). Serialization can be binary or JSON (see appSettings.json). The default is binary. The samples use Fspickler to serialize/deserialize events and snapshots. There is no use of ISerializer interface which was by default newtonsoft. Therefore the user needs to provide a serializer (pickler is ok for binary and for json as well). Pickler will not work with jsonb fields in Postgres as the indexes change their order in jsonb and pickler doesn't want it,  so they must be text.
+      Kafka is still not working on the read part. The write part is ok even though any read test has been dropped for incompatibility and will be rewritten.
+- version 2.0.3: changes from "now()" to utcNow() format in eventstores (Postgres and inMemory) and Sql template scripts.
+- published version 2.0.0 supporting binary serialization for events and snapshots on Postgres.
+  Note: the current examples provided are still referencing the previous 1.6.6 version.
+  [Here is an example compatible with 2.0.0. with binary serialization](https://github.com/tonyx/shoppingCartWithSharpino.git)
+
+
+- added a few new examples (can be used for dojos)
+  [pub system](https://github.com/tonyx/sharpinoDojoPubSystem)
+- version 1.6.6: can use plain text instead of JSON data type for database (see scripts in SqlTemplate dir). The appSettings has a new settings for it:
+```json
+{
+  "LockType":{"Case":"Optimistic"},
+  "RefreshTimeout": 100,
+  "CacheAggregateSize": 100,
+  "PgSqlJsonFormat":{"Case":"PlainText"},
+  "MailBoxCommandProcessorsSize": 100
+}
+```
+
+The other option is:
+```
+    "PgSqlJsonFormat":{"Case":"PgJson"}
+```    
+Basically you may wan to write json fields into text fields  for various reasons
+(on my side I experienced that an external library may require further tuning to properly work with jsonb fields in Postgres, so in that case a quick fix is just using text fields).
+Remember that we don't necessarily need Json fields as at the moment we just do serialize/deserialize and not querying on the json fields (at the moment).
+
+_old stuff deleted_
+
+More documentation [(Sharpino gitbook)](https://tonyx.github.io)
+
+<a href="https://www.buymeacoffee.com/Now7pmK92m" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+
