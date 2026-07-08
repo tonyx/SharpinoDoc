@@ -72,3 +72,12 @@ Some examples support integration with RabbitMQ. Make sure RabbitMQ is running (
 ```bash
 dotnet run --configuration:rabbitmq
 ```
+
+---
+
+## Online Interactive Playground (StackBlitz)
+
+You can run and test a memory-storage-based version of the Sharpino template directly in your browser without any local database setup:
+
+- **StackBlitz Demo:** [Run sharpinoTemplateMem in StackBlitz](https://stackblitz.com/github/tonyx/sharpinoTemplateMem)
+- **Source Repository:** [tonyx/sharpinoTemplateMem](https://github.com/tonyx/sharpinoTemplateMem)

@@ -9,6 +9,8 @@ In Event Sourcing, transactions are typically scoped to a single aggregate strea
 
 Sharpino 6.1.0 introduces the **decision boundary extension** feature, allowing you to enforce consistency involving external streams under the same optimistic lock transaction.
 
+- **Paper (Zenodo):** [Dynamic Consistency Boundaries in Event Sourcing via Multi-Stream Optimistic Concurrency Control](https://zenodo.org/records/21175352)
+
 ---
 
 ## The Concept
