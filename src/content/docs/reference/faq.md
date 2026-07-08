@@ -34,4 +34,3 @@ You can inspect the following side-by-side comparison repositories:
 ## Is there a full-stack template?
 Yes:
 - [Sharpino.Blazor.Template](https://github.com/tonyx/sharpinoBlazor) shows a full-stack walking skeleton utilizing a Blazor C# frontend communicating with a Sharpino F# backend.
-- A live restaurant order management demo is hosted at [orderssystem.azurewebsites.net](https://orderssystem.azurewebsites.net).

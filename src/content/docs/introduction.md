@@ -12,7 +12,7 @@ Sharpino is a lightweight event-sourcing library for F# designed to support scal
 - **State Persistence via History:** Event sourcing is a design pattern for persisting the state of an object by storing the sequence of events that have occurred on the object.
 - **Functional Alignment:** It fits the functional paradigm perfectly, as state is computed via a pure `evolve` function: `state = evolve(initialState, events)`.
 
-## Why Sharpino?
+## Main Features
 
 Sharpino is based on the following core principles:
 

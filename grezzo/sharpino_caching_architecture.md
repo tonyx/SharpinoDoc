@@ -14,7 +14,7 @@ However, this simplification imposes a cost on querying and navigation. To effic
 
 The relation between Aggregates and their resulting view models (Details) revolves around the concept of **Refreshable Details**. 
 
-A `Detail` is essentially an in-memory materialized view optimized for the read-side. To ensure these views do not drift out of sync when their underlying Aggregates emit new events, they are implemented using the `Refreshable<'A>` interface. 
+A `Detail` is essentially an in-memory materialized view optimized for the read-side. To ensure these views do not drift out of sync when their underlying Aggregates emit new events, they are implemented using the `Refreshable<'A>` or `RefreshableAsync<'A>` interface. 
 
 When a component of a Detail depends on an Aggregate, an association is recorded between the `AggregateId` and the specific `DetailsCacheKey` that represents the materialized view. Whenever the Aggregate produces an event modifying its state, the system reacts by triggering a refresh of all corresponding dependent Details (`RefreshDependentDetails`). This localized reactivity guarantees that our high-performance read models are kept consistently synced with the write-side Event Store.
 

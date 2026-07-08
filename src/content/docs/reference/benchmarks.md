@@ -20,12 +20,19 @@ A performance test comparing Sharpino against **UmaDb (v0.6.1)** was conducted t
 ### Execution Results
 
 ```txt
-Uma.db Append operation (10000 elements) took 86 ms         
-Sharpino Add initial states operation (10000 elements) took 30 ms                
-Sharpino Massive Subscription of 10000 courses took 31 ms
+Uma Append operation took 68 ms         
+Add operation took 29 ms                
+Massive Subscription of 10000 courses took 24 ms
+Parallel Uma Append operation (10000 elements) took 504 ms
+Parallel Sharpino Add operation (10000 elements) took 763 ms
+Parallel tasks (30 tasks of 10000 elements) Uma Append operation took 832 ms
+Parallel tasks (30 tasks of 10000 elements) Sharpino Add operation took 9190 ms
+
 ```
 
-As demonstrated, Sharpino operations took ~30–31 ms, while UmaDb completed similar appends in 86 ms, making Sharpino **between 177% and 187% faster** (nearly 2.8x speedup) than UmaDb.
+Sharpino prevails on single-task appends.
+Umadb prevails on parallel append tasks.
+
 
 ### Key Factors for Performance
 

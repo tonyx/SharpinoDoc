@@ -59,6 +59,26 @@ let crossAggregatesConstraint =
         }
 ```
 
+An corresponding Async version:
+```fsharp
+let jackShouldNotBeEnrolledInLitAndMath =
+    fun (ct: CancellationToken) ->
+        taskResult
+            {
+                let! (jackEvId, jack) = studentViewerAsync (ct |> Some) jack.Id 
+                let extraStreamsLocks =
+                    [((jack.Id, Student.Version + Student.StorageName), jackEvId)] |> Map.ofList
+
+                let! constraintToBeMet =
+                    (not 
+                        (jack.Courses |> List.exists (fun c -> c = literature.Id)
+                        && (jack.Courses |> List.exists (fun c -> c = math.Id)))
+                    )
+                    |> Result.ofBool "constraint not met"
+                return extraStreamsLocks
+            }
+```
+
 When you call command handler functions like `runAggregateCommandMd2` (or its equivalents), pass this lambda. The transaction will check the version of the student stream and fail if another process has updated Jack's enrollments concurrently.
 
 ---

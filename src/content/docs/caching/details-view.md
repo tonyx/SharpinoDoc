@@ -105,4 +105,33 @@ member this.GetCourseDetails (id: CourseId) =
     StateView.getRefreshableDetails<CourseDetails> detailsBuilder key
 ```
 
+Alternative async version (in the future it may change to avoid using ct twice)
+```fsharp
+        member this.GetCourseDetailsAsync (id: CourseId) (cancellationToken: Option<CancellationToken>) : Task<Result<CourseDetails, string>> =
+            let detailsBuilder =
+                fun (ct: option<CancellationToken>) ->
+                    let refresher =
+                        fun (ct: Option<CancellationToken>) ->
+                            taskResult {
+                                let! (course: Course) = this.GetCourseAsync id ct
+                                let! (students: List<Student>) = this.GetStudentsAsync course.Students ct
+                                return course, students
+                            }
+                    taskResult {
+                        let! course, students = refresher ct
+                        return
+                            (
+                                {
+                                    Course = course
+                                    Students = students
+                                    Refresher = refresher
+                                } :> RefreshableAsync<_>
+                                ,
+                                id.Id:: (students |> List.map _.StudentId.Id)
+                            )
+                    }
+            let key = DetailsCacheKey.OfType typeof<CourseDetails> id.Id
+            StateView.getRefreshableDetailsTaskResultAsync<CourseDetails> detailsBuilder key cancellationToken
+```
+
 The `detailsBuilder` returns a tuple: the `Refreshable` instance and a list of `Guid`s representing dependencies. The `DetailsCache` registers these associations. If any of those IDs are updated, the cache invalidates and triggers `Refresh()`.

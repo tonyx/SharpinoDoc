@@ -102,17 +102,17 @@ By implementing the Refreshable interface it can invoke the Refresher to return 
         {
             Student: Student
             Courses: List<Course>
-            Refresher: unit -> Result<Student * List<Course>, string>
+            Refresher: Option<CancellationToken> -> TaskResult<Student * List<Course>, string>
         }
-            member this.Refresh () =
-                result {
-                    let! student, courses = this.Refresher ()
+            member this.RefreshAsync ct =
+                taskResult {
+                    let! student, courses = this.Refresher ct
                     return { this with Student = student; Courses = courses }
                 }
-           
-            interface Refreshable<StudentDetails> with
-                member this.Refresh () =
-                    this.Refresh ()
+
+            interface RefreshableAsync<StudentDetails> with
+                member this.RefreshAsync ct =
+                    this.RefreshAsync ct
 
 ```
 
@@ -147,6 +147,37 @@ The type of code needed is at the moment verbose, and a simplified version may b
             let key = DetailsCacheKey (typeof<CourseDetails>, id.Id)
             StateView.getRefreshableDetails<CourseDetails> detailsBuilder key
 ```
+
+Alternative async version:
+```fsharp
+        member this.GetCourseDetailsAsync (id: CourseId) (cancellationToken: Option<CancellationToken>) : Task<Result<CourseDetails, string>> =
+            let detailsBuilder =
+                fun (ct: option<CancellationToken>) ->
+                    let refresher =
+                        fun (ct: Option<CancellationToken>) ->
+                            taskResult {
+                                let! (course: Course) = this.GetCourseAsync id ct
+                                let! (students: List<Student>) = this.GetStudentsAsync course.Students ct
+                                return course, students
+                            }
+                    taskResult {
+                        let! course, students = refresher ct
+                        return
+                            (
+                                {
+                                    Course = course
+                                    Students = students
+                                    Refresher = refresher
+                                } :> RefreshableAsync<_>
+                                ,
+                                id.Id:: (students |> List.map _.StudentId.Id)
+                            )
+                    }
+            let key = DetailsCacheKey.OfType typeof<CourseDetails> id.Id
+            StateView.getRefreshableDetailsTaskResultAsync<CourseDetails> detailsBuilder key cancellationToken
+```
+(note: the use of the ct twice could be redoundant and in the future this may be simplified in the future)
+
 the detailsBuilder contains a pair of the actual details and the list of ids that should trigger a refresh.
 The stateView will be able to use memoization to store the details and to populate the list of
 dependencies between the object that will build the detail state (ids of the couse itself and the students).

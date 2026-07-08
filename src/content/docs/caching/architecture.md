@@ -37,9 +37,10 @@ However, this simplification imposes a cost on querying and navigation. To effic
 
 The relation between Aggregates and their resulting view models (Details) revolves around the concept of **Refreshable Details**. 
 
-A `Detail` is essentially an in-memory materialized view optimized for the read-side. To ensure these views do not drift out of sync when their underlying Aggregates emit new events, they are implemented using the `Refreshable<'A>` interface. 
+A `Detail` is essentially an in-memory materialized view optimized for the read-side. To ensure these views do not drift out of sync when their underlying Aggregates emit new events, they are implemented using the `Refreshable<'A>` or `RefreshableAsync<'A>` interface. 
 
-When a component of a Detail depends on an Aggregate, an association is recorded between the `AggregateId` and the specific `DetailsCacheKey` that represents the materialized view. Whenever the Aggregate produces an event modifying its state, the system reacts by triggering a refresh of all corresponding dependent Details (`RefreshDependentDetails`). This localized reactivity guarantees that our high-performance read models are kept consistently synced with the write-side Event Store.
+
+When a component of a Detail depends on an Aggregate, an association is recorded between the `AggregateId` and the specific `DetailsCacheKey` that represents the materialized view. Whenever the Aggregate produces an event modifying its state, the system reacts by triggering a refresh of all corresponding dependent Details (`RefreshDependentDetails` or `RefreshDependendDetailsAsync`). This localized reactivity guarantees that our high-performance read models are kept consistently synced with the write-side Event Store.
 
 ### Refreshable Details Flow
 
@@ -85,13 +86,13 @@ Reconstituting an aggregate state from a long stream of events can be costly if 
 
 ## 4. Cache for Details (`DetailsCache`)
 
-The `DetailsCache` is responsible for storing the computed `Refreshable` states and navigating the links between Aggregates and Details.
+The `DetailsCache` is responsible for storing the computed `Refreshable` or `RefreshableAsync` states and navigating the links between Aggregates and Details.
 
 It internally operates two distinct caches:
 1. **`statesDetails`:** Stores the actual materialized view objects (wrapped in closures). Notably, because these objects often contain `System.Type` references or active closures that cannot easily be JSON serialized, this cache **intentionally avoids L2 distribution**. It is purely a fast, in-memory Level 1 (L1) cache.
 2. **`objectDetailsAssociationsCache`:** Stores the mappings (`List<DetailsCacheKey>`) dependent on any given `AggregateId`. Because this entails simple, serializable data, it is safely persisted in the L2 Distributed Cache, allowing multiple nodes to understand aggregate dependencies.
 
-When `RefreshDependentDetails(aggregateId)` is triggered, the `DetailsCache`:
+When `RefreshDependentDetails(aggregateId)` or `RefreshDependentDetailsAsync(aggregateId, ct)` is triggered, the `DetailsCache`:
 1. Looks up the association cache to find all `DetailsCacheKey`s bound to the aggregate.
 2. Invokes the `Refresh()` mechanism on each corresponding `Refreshable`.
 3. If the refresh succeeds, updates the `statesDetails` L1 cache. If it fails (e.g., indicating the referenced data was destroyed), the entry is safely evicted.
@@ -135,6 +136,6 @@ Relying solely on an L2 cache can lead to brief windows of inconsistency between
 1. **Publishing:** When an Aggregate state is evicted (`Clean`) or a Detail is updated in the local L1 Cache, the system fires an `EntrySet` or `EntryRemove` message to the Backplane.
 2. **Receiving and Reacting:** Other nodes listening to the Backplane receive these messages and react:
    - For `AggregateCache3`: If a node receives a removal/update notification for an aggregate from another instance, it explicitly invalidates its own local L1 cache for that aggregate.
-   - **Crucially, it also automatically extracts the `AggregateId` and invokes `DetailsCache.Instance.RefreshDependentDetails(guidKey)`**.
+   - **Crucially, it also automatically extracts the `AggregateId` and invokes  `DetailsCache.Instance.RefreshDependentDetailsAsync(aggregateId, ct)`**.
     
 This interconnected behavior guarantees that an action occurring on Node A will not only drop the stale aggregate on Node B but will automatically instruct Node B to eagerly rebuild or evict any locally mapped Refreshable Details linked to that Aggregate.
