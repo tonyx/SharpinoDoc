@@ -25,7 +25,7 @@ Sharpino Add initial states operation (10000 elements) took 30 ms
 Sharpino Massive Subscription of 10000 courses took 31 ms
 ```
 
-As demonstrated, Sharpino operations took ~30–31 ms, while UmaDb completed similar appends in 86 ms, making Sharpino roughly twice as fast.
+As demonstrated, Sharpino operations took ~30–31 ms, while UmaDb completed similar appends in 86 ms, making Sharpino **between 177% and 187% faster** (nearly 2.8x speedup) than UmaDb.
 
 ### Key Factors for Performance
 

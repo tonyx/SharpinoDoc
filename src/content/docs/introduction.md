@@ -30,3 +30,11 @@ Sharpino is based on the following core principles:
 1. **Idiomatic F#:** Domain modeling and event sourcing in backend architectures using the power of F# types (Discriminated Unions, Records).
 2. **Multilanguage Integration:** Designed to plug easily into multi-language systems (e.g., Blazor/C# on the frontend and F# on the backend).
 3. **No Impedance Mismatch:** Avoid object-relational mapping (ORM) complexity. Domain objects do not need database column-mapping knowledge.
+
+---
+
+<div align="center">
+  <a href="https://www.buymeacoffee.com/Now7pmK92m" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 50px !important; width: 180px !important;" />
+  </a>
+</div>
