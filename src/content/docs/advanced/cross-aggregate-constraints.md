@@ -30,7 +30,7 @@ This prevents race conditions where the state of a referenced external aggregate
 ## Example: Enrolling with Mutual Constraints
 
 Consider a school scheduling system. A business rule states:
-> *"Teacher John can teach Math only if student Jack is enrolled in Math and not enrolled in Literature."*
+> *"Teacher John can teach Math only if it is false that student Jack is enrolled in both Math and Religion."*
 
 Although the command only targets the **Course** or **Teacher** aggregates directly, the decision depends on **Student Jack's** enrollment state.
 
@@ -50,10 +50,12 @@ let crossAggregatesConstraint =
 
             // 3. Evaluate the business rule constraint
             let! constraintToBeMet =
-                (not (jack.Courses |> List.exists (fun c -> c = literature.Id)
-                      && (jack.Courses |> List.exists (fun c -> c = math.Id)))
+                (not (
+                    (jack.Courses |> List.exists (fun c -> c = religion.Id))
+                    && (jack.Courses |> List.exists (fun c -> c = math.Id))
+                    )
                 )
-                |> Result.ofBool "Constraint not met: Jack enrolled in Math and Literature"
+                |> Result.ofBool "Constraint not met: Jack enrolled in Math and Religion"
                 
             return extraStreamsLocks
         }
@@ -71,7 +73,7 @@ let jackShouldNotBeEnrolledInLitAndMath =
 
                 let! constraintToBeMet =
                     (not 
-                        (jack.Courses |> List.exists (fun c -> c = literature.Id)
+                        (jack.Courses |> List.exists (fun c -> c = religion.Id)
                         && (jack.Courses |> List.exists (fun c -> c = math.Id)))
                     )
                     |> Result.ofBool "constraint not met"

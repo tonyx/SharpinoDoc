@@ -20,8 +20,8 @@ let crossAggregatesConstraint =
 
                 let! constraintToBeMet =
                     (not 
-                            (jack.Courses |> List.exists (fun c -> c = literature.Id)
-                            && (jack.Courses |> List.exists (fun c -> c = math.Id)))
+                            (jack.Courses |> List.exists (fun c -> c = math.Id)
+                            && (jack.Courses |> List.exists (fun c -> c = religion.Id)))
                     )
                     |> Result.ofBool "constraint not met"
                 return extraStreamsLocks
@@ -29,7 +29,9 @@ let crossAggregatesConstraint =
 
 ```
 the test that contains this expression is named
-"Teacher John will be able to teach Math if student Jack is enrolled in that course and not in literature"
+"Teacher John can't be assigned to Math course if student Jack is enrolled in that course and in Relition as well (in other casees he can)"
+or, rephrased:
+"Teacher John can be assigned to Math course only if its is false that student Jack is enrolled in both Math and Religion"
 
 That means that despite only the courses and teachers streams are involved in the command execution, the student stream is also involved in the "wider sense" of the decision boundary, because the constraint depends o a particular combination of the student's enrollment.
 
