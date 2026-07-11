@@ -5,21 +5,20 @@ description: How to enforce consistency rules across multiple aggregate streams 
 
 # Extending the Decision Boundary
 
-In Event Sourcing, transactions are typically scoped to a single aggregate stream. However, real-world business rules often require enforcing consistency invariants that span multiple aggregates (cross-aggregate constraints).
+In Event Sourcing, transactions are typically scoped to a single aggregate stream. However, real-world business rules may require enforcing consistency invariants that span multiple aggregates (cross-aggregate constraints).
 
-Sharpino 6.1.0 introduces the **decision boundary extension** feature, allowing you to enforce consistency involving external streams under the same optimistic lock transaction.
-
-- **Paper (Zenodo):** [Dynamic Consistency Boundaries in Event Sourcing via Multi-Stream Optimistic Concurrency Control](https://zenodo.org/records/21175352)
+Sharpino 6.1.0 introduces the **decision boundary extension** feature, allowing you to enforce consistency involving external streams under the same optimistic lock transaction, as described in this [short article](https://zenodo.org/records/21175352).
+ 
 
 ---
 
 ## The Concept
 
-Traditionally, when you execute a command, the optimistic lock checks the event ID (version) only for the target aggregate stream.
+Traditionally, when you execute a command, the optimistic lock checks the version (which is the event ID for Sharpino) only for the target aggregate stream.
 
 With the extended decision boundary:
-1. You provide a **cross-aggregates constraint lambda** along with the command.
-2. The lambda retrieves the current state of other relevant aggregates, evaluates the business rule, and returns their event IDs (versions).
+1. You provide a **cross-aggregates constraint** expressed as a lambda expression along with the command.
+2. The lambda retrieves the current state of other relevant aggregates, evaluates the business rule, and returns a map of event IDs, aggregate IDs, and stream names for the target aggregates. 
 3. The CommandHandler forwards these external versions to the event store.
 4. The database transaction stores the new events only if **both** the target aggregate version and all external aggregate versions match.
 
@@ -61,7 +60,7 @@ let crossAggregatesConstraint =
         }
 ```
 
-An corresponding Async version:
+A corresponding async version:
 ```fsharp
 let jackShouldNotBeEnrolledInLitAndMath =
     fun (ct: CancellationToken) ->
@@ -81,7 +80,7 @@ let jackShouldNotBeEnrolledInLitAndMath =
             }
 ```
 
-When you call command handler functions like `runAggregateCommandMd2` (or its equivalents), pass this lambda. The transaction will check the version of the student stream and fail if another process has updated Jack's enrollments concurrently.
+When you call command handler functions like `runAggregateCommandMd2` (or its equivalents), you also pass this lambda. The transaction will check the version of the student stream and fail if another process has updated Jack's enrollments concurrently.
 
 ---
 

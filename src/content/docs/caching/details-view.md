@@ -3,9 +3,10 @@ title: Refreshable Details & Views
 description: Caching composite read-model views (Details) using the Refreshable interface.
 ---
 
+# Refreshable Details/Views
 An application usually needs composed views of multiple objects (e.g., combining `Student` and `Course` data). In Sharpino, these composed read models are called **Details**.
 
-Even though details benefit from single-object caching, caching the fully composed Detail view models themselves provides significant performance improvements.
+Even though Details already benefit from single-object caching, caching the fully composed Detail view models themselves provides additional performance improvements.
 
 ## Problem Context
 
@@ -14,7 +15,7 @@ Consider a `Student` aggregate:
 ```fsharp
 type Student =
     {
-        Id: StudentId
+        StudentId: StudentId
         Name: string
         Courses: List<CourseId>
         MaxNumberOfCourses: int
@@ -68,6 +69,7 @@ type StudentDetails =
         member this.Refresh () =
             this.Refresh ()
 ```
+Note: A similar definition exists for asynchronous scenarios (`RefreshableAsync`).
 
 ---
 
@@ -105,7 +107,7 @@ member this.GetCourseDetails (id: CourseId) =
     StateView.getRefreshableDetails<CourseDetails> detailsBuilder key
 ```
 
-Alternative async version (in the future it may change to avoid using ct twice)
+Alternative async version (which may be updated in the future to avoid passing the cancellation token twice):
 ```fsharp
         member this.GetCourseDetailsAsync (id: CourseId) (cancellationToken: Option<CancellationToken>) : Task<Result<CourseDetails, string>> =
             let detailsBuilder =
@@ -134,4 +136,4 @@ Alternative async version (in the future it may change to avoid using ct twice)
             StateView.getRefreshableDetailsTaskResultAsync<CourseDetails> detailsBuilder key cancellationToken
 ```
 
-The `detailsBuilder` returns a tuple: the `Refreshable` instance and a list of `Guid`s representing dependencies. The `DetailsCache` registers these associations. If any of those IDs are updated, the cache invalidates and triggers `Refresh()`.
+The `detailsBuilder` returns a tuple containing the `Refreshable` instance and a list of `Guid` dependencies. The `DetailsCache` registers these associations; if any of those IDs are updated, the cache invalidates the entry and triggers `Refresh()`.

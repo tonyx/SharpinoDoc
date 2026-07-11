@@ -44,4 +44,4 @@ Here is an overview of the key samples:
 - **Purpose:** Scaled caching using only PostgreSQL.
 - **Key Features:**
   - Uses PostgreSQL as the L2 cache backplane.
-  - broadcasts eviction and synchronization notifications between L1 and L2 caches using PostgreSQL `LISTEN` and `NOTIFY` commands.
+  - Broadcasts eviction and synchronization notifications between L1 and L2 caches using PostgreSQL `LISTEN` and `NOTIFY` commands.

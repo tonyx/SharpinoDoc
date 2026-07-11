@@ -37,7 +37,7 @@ graph TD
 ```
 
 ```fsharp
-// Example conceptual pattern
+// Conceptual pattern
 let deserializeTypeX (serializedData: byte[]) =
     match tryDeserialize<'TypeX> serializedData with
     | Ok state -> Ok state

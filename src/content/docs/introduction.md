@@ -16,19 +16,20 @@ Sharpino is a lightweight event-sourcing library for F# designed to support scal
 
 Sharpino is based on the following core principles:
 
-- **PostgresSQL-Based Event Store:** Robust persistence to register events and snapshots.
+- **PostgreSQL-Based Event Store:** Robust persistence to register events and snapshots.
 - **In-Memory Store:** Fast in-memory event store to optimize test suites.
-- **Event ID Optimistic Locking:** Checking the first available event ID position on the basis of the event ID passed by the command handler to prevent concurrency conflicts.
+- **Event ID Optimistic Locking:** Verifies the first available event ID position based on the event ID provided by the command handler to prevent concurrency conflicts.
 - **Multiple Stream Transactions:** Executing multiple commands involving different aggregates as single database transactions.
-- **StateViewers:** Query the in-memory cache and fall back to the event store to replay events starting from the latest snapshot if there is a cache miss.
+- **StateViewers:** Queries the in-memory cache and falls back to the event store to replay events starting from the latest snapshot if there is a cache miss.
 - **Soft Deletion & History:** Mark aggregates as deleted while keeping the historical record accessible.
-- **GDPR Compliance:** Support for overwriting, clearing, or resetting snapshots and events in case a user requests data deletion.
+- **GDPR Compliance:** Supports overwriting, clearing, or resetting snapshots and events in case a user requests data deletion.
 - **Message Broker Integration:** Seamlessly fire messages (like InitialState, Events, Deletion) to RabbitMQ or other message buses after events are safely stored.
+- **State-based Dynamic Consistency Boundaries:** Encapsulates business logic consistency rules using lambda functions that evaluate extended conditions, extending optimistic locking using related EventIds.
 
 ## Library Goals
 
 1. **Idiomatic F#:** Domain modeling and event sourcing in backend architectures using the power of F# types (Discriminated Unions, Records).
-2. **Multilanguage Integration:** Designed to plug easily into multi-language systems (e.g., Blazor/C# on the frontend and F# on the backend).
+2. **Multi-language Integration:** Designed to plug easily into multi-language systems (e.g., Blazor/C# on the frontend and F# on the backend).
 3. **No Impedance Mismatch:** Avoid object-relational mapping (ORM) complexity. Domain objects do not need database column-mapping knowledge.
 
 ---

@@ -5,13 +5,13 @@ description: Overview of Sharpino caching architecture for aggregates, details, 
 
 # Caching Architecture: Aggregates, Details, and Backplanes
 
-This document outlines the caching architecture within the Sharpino project, detailing the handling of domain aggregates, materialized read-model views (Details), and the mechanisms used to keep them consistently synchronized across distributed instances utilizing an L2 Cache and a message backplane.
+This document outlines the caching architecture within the Sharpino project, detailing the handling of domain aggregates, materialized read-model views (Details), and the mechanisms used to keep them consistently synchronized across distributed instances utilizing an L2 Cache and a message backplane. Note that the L2 cache is an advanced configuration. As we will see, it stores only specific kinds of data normally present in the L1 cache. It is typically not used in the most common case of a single-node application. Nevertheless, the architecture is ready for multi-node distribution when we need to ensure that the L1 cache on any node is invalidated when another node updates its value, using the L2 cache as a fallback read. Further note: version 6.1.2 lacks Redis support as an L2 cache provider; only SQL Server/Azure SQL or PostgreSQL can serve as the L2 cache provider.
 
 ## 1. The Context: Cross-Stream Invariants and Unidirectional Design
 
 In an Event Sourced system where domain events are first-class citizens, a recurring challenge is dealing with cross-stream invariants—rules that span across multiple aggregate streams (e.g., ensuring a bidirectional relationship between `Course` and `Student` remains consistent). Maintaining these invariants purely through distributed transactional events can quickly become complex, expensive, and fragile.
 
-As a solution, Sharpino advocates for a **unidirectional design approach**. Instead of enforcing mutual invariants directly between multiple associated aggregates, a single aggregate acts as the source of truth for the relationship. 
+Although many presented examples contain mutual references, it is generally more appropriate to adopt a **unidirectional design approach**. In this approach, instead of enforcing mutual invariants directly between multiple associated aggregates, a single aggregate acts as the source of truth for the relationship. 
 
 ```mermaid
 graph TD
@@ -39,8 +39,8 @@ The relation between Aggregates and their resulting view models (Details) revolv
 
 A `Detail` is essentially an in-memory materialized view optimized for the read-side. To ensure these views do not drift out of sync when their underlying Aggregates emit new events, they are implemented using the `Refreshable<'A>` or `RefreshableAsync<'A>` interface. 
 
+When a component of a Detail depends on an Aggregate, an association is recorded between the `AggregateId` and the specific `DetailsCacheKey` that represents the materialized view. Whenever the Aggregate produces an event modifying its state, the system reacts by triggering a refresh of all corresponding dependent Details (`RefreshDependentDetails` or `RefreshDependentDetailsAsync`). This localized reactivity guarantees that our high-performance read models are kept consistently synced with the write-side Event Store.
 
-When a component of a Detail depends on an Aggregate, an association is recorded between the `AggregateId` and the specific `DetailsCacheKey` that represents the materialized view. Whenever the Aggregate produces an event modifying its state, the system reacts by triggering a refresh of all corresponding dependent Details (`RefreshDependentDetails` or `RefreshDependendDetailsAsync`). This localized reactivity guarantees that our high-performance read models are kept consistently synced with the write-side Event Store.
 
 ### Refreshable Details Flow
 
@@ -78,8 +78,8 @@ sequenceDiagram
 
 Reconstituting an aggregate state from a long stream of events can be costly if done for every command or read request. Sharpino implements an `AggregateCache3` to address this:
 
-- **Primary Role:** It memoizes the most recent calculated state of an aggregate (`Result<EventId * obj, string>`) to dramatically speed up subsequent command evaluations.
-- **Cache Lifecycle:** State is cached per `AggregateId`. Upon emitting a new event, the cached state is updated or invalidated (`Clean`).
+- **Primary Role:** It memoizes the most recently calculated state of an aggregate (`Task<Result<EventId * obj, string>>`) to dramatically speed up subsequent command evaluations.
+- **Cache Lifecycle:** State is cached per `EventId` and `AggregateId`. Upon emitting a new event, the cached state is updated accordingly.
 - **Distributed Ready:** It seamlessly integrates with a Level 2 (L2) Distributed Cache (e.g., SQL Server Cache) ensuring that the processing load of aggregate reconstruction is shared and minimized across multiple nodes.
 
 ---
@@ -131,11 +131,11 @@ Sharpino can hook into a distributed cache (configured for Azure SQL Server via 
 An important operational characteristic defined in the configuration is that the **L2 Time-to-Live (TTL) is strictly shorter than the L1 TTL**. This design averts situations where stale L2 distributed entries mistakenly pollute fresh L1 caches when application nodes are restarted.
 
 ### Message Backplane Synchronization
-Relying solely on an L2 cache can lead to brief windows of inconsistency between nodes. A Backplane (using Azure Service Bus or MQTT) is implemented to broadcast immediate cache mutations (Sets/Removes).
+Relying solely on an L2 cache can lead to brief windows of inconsistency between nodes. A Backplane (using Azure Service Bus, MQTT, or PostgreSQL `LISTEN`/`NOTIFY`) is implemented to broadcast immediate cache mutations (Sets/Removes).
 
 1. **Publishing:** When an Aggregate state is evicted (`Clean`) or a Detail is updated in the local L1 Cache, the system fires an `EntrySet` or `EntryRemove` message to the Backplane.
 2. **Receiving and Reacting:** Other nodes listening to the Backplane receive these messages and react:
    - For `AggregateCache3`: If a node receives a removal/update notification for an aggregate from another instance, it explicitly invalidates its own local L1 cache for that aggregate.
-   - **Crucially, it also automatically extracts the `AggregateId` and invokes  `DetailsCache.Instance.RefreshDependentDetailsAsync(aggregateId, ct)`**.
+   - **Crucially, it also automatically extracts the `AggregateId` and invokes `DetailsCache.Instance.RefreshDependentDetailsAsync(aggregateId, ct)`**.
     
 This interconnected behavior guarantees that an action occurring on Node A will not only drop the stale aggregate on Node B but will automatically instruct Node B to eagerly rebuild or evict any locally mapped Refreshable Details linked to that Aggregate.

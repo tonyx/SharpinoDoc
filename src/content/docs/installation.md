@@ -38,11 +38,11 @@ dotnet new install Sharpino.Templates
 dotnet new sharpino
 ```
 
-This sets up a minimal project template including a docker-compose configuration for Postgres.
+This sets up a minimal project template including a docker-compose configuration for PostgreSQL.
 
 ## Database Configuration
 
-1. **dbmate templates:** Sharpino samples use `dbmate` templates to configure Postgres tables for event and snapshot storage.
+1. **dbmate templates:** Sharpino samples use `dbmate` templates to configure PostgreSQL tables for event and snapshot storage.
 2. **Environment Variables:** Set up a `.env` file in your project root containing the database connection URL:
    ```ini
    DATABASE_URL=postgres://username:password@localhost:5432/db_name?sslmode=disable
@@ -51,10 +51,19 @@ This sets up a minimal project template including a docker-compose configuration
    ```bash
    dbmate up
    ```
+Note that the template already contains a Docker-ready PostgreSQL database, so you can simply run:
+```bash
+docker-compose up -d
+dbmate up
+dotnet run
+```
 
 ## Running Tests
 
-Once the database and environment variables are ready, you can run all the sample tests via:
+If you clone the entire project from GitHub, you will need to configure a `.env` file for each project.
+
+Once the database and environment variables are configured, you can run all tests for a specific sample folder (e.g., `Sharpino.Sample.12`) using:
+
 
 ```bash
 runTests.sh
@@ -67,7 +76,7 @@ dotnet test
 ```
 
 ### RabbitMQ Integration (Optional)
-Some examples support integration with RabbitMQ. Make sure RabbitMQ is running (e.g., `rabbitmq-server`), and run the subproject with:
+Some examples support RabbitMQ integration. Make sure RabbitMQ is running (e.g., via `rabbitmq-server`), then run the project with:
 
 ```bash
 dotnet run --configuration:rabbitmq

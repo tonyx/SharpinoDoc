@@ -5,7 +5,7 @@ description: Architecture of the blazorBookLibrary demo application and SignalR 
 
 # Real-world Demo: Blazor Book Library
 
-The **Blazor Book Library** is a fully functional reference application demonstrating the Sharpino event-sourcing backend working together with a Blazor frontend.
+The **Blazor Book Library** is a fully functional reference application demonstrating the Sharpino event-sourcing backend working alongside a Blazor frontend.
 
 - **GitHub Repository:** [tonyx/blazorBookLibrary](https://github.com/tonyx/blazorBookLibrary)
 - **Live Demo Website:** [www.biblionet.eu](http://www.biblionet.eu)
@@ -64,7 +64,7 @@ let setupDetailsCacheRefreshNotification (hubContext: IHubContext<BookHub>) =
 ```
 
 ### 2. Reacting to Refreshes (Blazor C# Frontend)
-In your Blazor components (e.g., `BookCatalog.razor`), configure a `HubConnection` to listen for refresh events. When a refresh notification is received, invalidate local states and trigger a re-render:
+In your Blazor components (e.g., `BookCatalog.razor`), configure a `HubConnection` to listen for refresh events. When a refresh notification is received, invalidate local state and trigger a re-render:
 
 ```csharp
 @using Microsoft.AspNetCore.SignalR.Client

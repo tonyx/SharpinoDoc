@@ -25,12 +25,17 @@ export default defineConfig({
 					label: 'Core Concepts',
 					items: [
 						{ label: 'Overview & Architecture', slug: 'core-concepts' },
+						{ label: 'Aggregates', slug: 'aggregates' },
+						{ label: 'Events', slug: 'events' },
+						{ label: 'Commands', slug: 'commands' },
+						{ label: 'StateView', slug: 'stateview' },
 					],
 				},
 				{
 					label: 'Caching',
 					items: [
 						{ label: 'Caching Architecture', slug: 'caching/architecture' },
+						{ label: 'Aggregate Cache', slug: 'caching/aggregate-cache' },
 						{ label: 'Refreshable Details & Views', slug: 'caching/details-view' },
 						{ label: 'Cache Invalidation & L2', slug: 'caching/report' },
 					],
