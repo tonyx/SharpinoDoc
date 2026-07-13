@@ -20,11 +20,12 @@ Add the NuGet package `Sharpino` to your project:
 dotnet add package Sharpino
 ```
 
-> [!NOTE]
-> If you encounter compilation errors like `"A function labeled with the 'EntryPointAttribute' attribute must be the last declaration"`, you can fix it by adding the following line to your `.fsproj` file:
-> ```xml
-> <GenerateProgramFile>false</GenerateProgramFile>
-> ```
+:::note
+If you encounter compilation errors like `"A function labeled with the 'EntryPointAttribute' attribute must be the last declaration"`, you can fix it by adding the following line to your `.fsproj` file:
+```xml
+<GenerateProgramFile>false</GenerateProgramFile>
+```
+:::
 
 ## Project Template Installation
 

@@ -60,8 +60,9 @@ sequenceDiagram
 
 ## 2. Involvement of L2 Cache in Aggregate Cache
 
-> [!IMPORTANT]
-> **The L2 Cache is NOT involved in the aggregate cache (`AggregateCache3`) flow.**
+:::note[Important]
+**The L2 Cache is NOT involved in the aggregate cache (`AggregateCache3`) flow.**
+:::
 
 - `statePerAggregate` caches F# asynchronous Task objects (`Task<Result<EventId * obj, string>>`), which cannot cross process boundaries or be serialized.
 - Therefore, the L2 distributed setup is commented out by design.
@@ -78,3 +79,14 @@ Below is a breakdown of the caches managed in `Cache.fs` and their L2 cache elig
 | **`objectDetailsAssociationsCache`** | Maps aggregate IDs to lists of details keys. | **Yes** | **Yes** | Contains plain list/GUID combinations which are fully JSON-serializable. |
 | **`statesDetails`** | Caches the actual projected/memoized detail values. | **Yes** | **No** | Caches `RefreshableAsync<'T>` wrappers enclosing live F# closures and type references, which cannot be serialized. |
 | **`statePerAggregate`** | Caches the reconstructed aggregate states. | **Yes** | **No** | Stores `Task` objects representing the asynchronous state reconstruction, which cannot be serialized. |
+
+## 4. Supported L2 Cache Providers
+
+- Redis
+- Sql
+- Postgres
+
+Example of how to configure L2 Cache are shown in the samples from 24 to 28.
+
+Note: a future change will be to transform the value of the entries of the L1 cache from Task<Result<EventId * obj, string>> to  Result<EventId * obj, string> to be able to use them also in the L2 cache. This will avoid that invalidation may require event replay. 
+ 

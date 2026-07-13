@@ -7,7 +7,7 @@ description: How to enforce consistency rules across multiple aggregate streams 
 
 In Event Sourcing, transactions are typically scoped to a single aggregate stream. However, real-world business rules may require enforcing consistency invariants that span multiple aggregates (cross-aggregate constraints).
 
-Sharpino 6.1.0 introduces the **decision boundary extension** feature, allowing you to enforce consistency involving external streams under the same optimistic lock transaction, as described in this [short article](https://zenodo.org/records/21175352).
+Sharpino 6.1.0 introduces the **decision boundary extension** feature, allowing you to enforce consistency involving external streams under the same optimistic lock transaction, as described in this [short article](https://zenodo.org/records/21333296).
  
 
 ---
