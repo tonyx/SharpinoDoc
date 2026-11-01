@@ -5,7 +5,7 @@ description: Overview of Sharpino caching architecture for aggregates, details, 
 
 # Caching Architecture: Aggregates, Details, and Backplanes
 
-This document outlines the caching architecture within the Sharpino project, detailing the handling of domain aggregates, materialized read-model views (Details), and the mechanisms used to keep them consistently synchronized across distributed instances utilizing an L2 Cache and a message backplane. Note that the L2 cache is an advanced configuration. As we will see, it stores only specific kinds of data normally present in the L1 cache. It is typically not used in the most common case of a single-node application. Nevertheless, the architecture is ready for multi-node distribution when we need to ensure that the L1 cache on any node is invalidated when another node updates its value, using the L2 cache as a fallback read. Further note: version 6.1.2 lacks Redis support as an L2 cache provider; only SQL Server/Azure SQL or PostgreSQL can serve as the L2 cache provider.
+This document outlines the caching architecture within the Sharpino project, detailing the handling of domain aggregates, materialized read-model views (Details), and the mechanisms used to keep them consistently synchronized across distributed instances utilizing an L2 Cache and a message backplane.
 
 ## 1. The Context: Cross-Stream Invariants and Unidirectional Design
 
@@ -41,7 +41,6 @@ A `Detail` is essentially an in-memory materialized view optimized for the read-
 
 When a component of a Detail depends on an Aggregate, an association is recorded between the `AggregateId` and the specific `DetailsCacheKey` that represents the materialized view. Whenever the Aggregate produces an event modifying its state, the system reacts by triggering a refresh of all corresponding dependent Details (`RefreshDependentDetails` or `RefreshDependentDetailsAsync`). This localized reactivity guarantees that our high-performance read models are kept consistently synced with the write-side Event Store.
 
-
 ### Refreshable Details Flow
 
 This diagram shows how emitting an event triggers the dependent details to refresh:
@@ -76,11 +75,24 @@ sequenceDiagram
 
 ## 3. Cache for Aggregates (`AggregateCache3`)
 
-Reconstituting an aggregate state from a long stream of events can be costly if done for every command or read request. Sharpino implements an `AggregateCache3` to address this:
+Reconstituting an aggregate state from a long stream of events can be costly if done for every command or read request. Sharpino implements an `AggregateCache3` backed by `ZiggyCreatures.FusionCache` to address this:
 
-- **Primary Role:** It memoizes the most recently calculated state of an aggregate (`Task<Result<EventId * obj, string>>`) to dramatically speed up subsequent command evaluations.
-- **Cache Lifecycle:** State is cached per `EventId` and `AggregateId`. Upon emitting a new event, the cached state is updated accordingly.
-- **Distributed Ready:** It seamlessly integrates with a Level 2 (L2) Distributed Cache (e.g., SQL Server Cache) ensuring that the processing load of aggregate reconstruction is shared and minimized across multiple nodes.
+- **Primary Role:** It memoizes the most recent calculated state of an aggregate (`CachedAggregateEntry`) to dramatically speed up subsequent command evaluations and queries.
+- **Dual-Tier Model (`CachedAggregateEntry`)**:
+  ```fsharp
+  [<CLIMutable>]
+  type CachedAggregateEntry = {
+      EventId: EventId
+      TypeName: string
+      StateJson: string
+      [<System.Text.Json.Serialization.JsonIgnore>]
+      mutable BoxedState: obj option
+  }
+  ```
+  - **L1 Sub-Microsecond Speed:** In-memory hits utilize `BoxedState`, which retains the direct reference to the aggregate object. Reading from L1 bypasses JSON deserialization entirely.
+  - **L2 Serializable Persistence:** When written to L2 (PostgreSQL, Redis, or SQL Server), the entry is serialized as JSON (`EventId`, `TypeName`, `StateJson`). When rehydrated from L2 on cold nodes, `BoxedState` is deserialized on-demand.
+- **Cache Lifecycle:** State is cached per `AggregateId`. Emitting a new event updates or evicts the cached entry (`Clean`).
+- **Distributed Read-Through Acceleration (`StateView`):** When loading snapshots via `StateView.getLastAggregateSnapshot` or `StateView.getLastAggregateSnapshotAsync`, Sharpino first checks `AggregateCache3.Instance.GetEntry / GetEntryAsync`. If present in L1 or L2, the cached snapshot is used immediately, skipping the database snapshot table.
 
 ---
 
@@ -101,7 +113,7 @@ When `RefreshDependentDetails(aggregateId)` or `RefreshDependentDetailsAsync(agg
 
 ## 5. Distributed Cache & Backplane Synchronization
 
-To support horizontal scaling, Sharpino instruments its cache layers (using `FusionCache`) with an **L2 Cache** and a **Backplane**.
+To support horizontal scaling, Sharpino instruments its cache layers (using `FusionCache`) with an **L2 Distributed Cache** and a **Backplane**.
 
 ```mermaid
 graph TD
@@ -109,33 +121,46 @@ graph TD
         A_App[App Command] --> A_AC[AggregateCache3]
         A_AC --> A_EventStore[Database / EventStore]
         A_AC -. "1. Update Local" .-> A_L1[L1 Cache]
-        A_AC -- "2. Publish Message" --> ASB((Azure Service Bus / MQTT<br/>Backplane))
+        A_AC -- "2. Publish Message" --> ASB((Backplane<br/>PG Notify / Redis / Service Bus))
     end
 
     subgraph Node_B_Reader
         ASB -- "3. Receive Message" --> B_AC[AggregateCache3]
-        B_AC -. "4. Invalidate/Remove" .-> B_L1_Agg[Aggregate L1 Cache]
+        B_AC -. "4. Invalidate L1" .-> B_L1_Agg[Aggregate L1 Cache]
         B_AC -- "5. Trigger Refresh" --> B_DC[DetailsCache]
         B_DC -. "6. Recompute View" .-> B_L1_Det[statesDetails L1 Cache]
     end
 
     subgraph External
-        L2[(Azure SQL L2 Cache)]
-        A_AC -. "Optional Sync" .-> L2
-        B_AC -. "Optional Request" .-> L2
+        L2[(L2 Distributed Cache<br/>PostgreSQL / Redis / SQL Server)]
+        A_AC -. "Sync L2" .-> L2
+        B_AC -. "Read-Through" .-> L2
     end
 ```
 
-### L2 Cache Integration
-Sharpino can hook into a distributed cache (configured for Azure SQL Server via `setupAzureSqlCache`). 
-An important operational characteristic defined in the configuration is that the **L2 Time-to-Live (TTL) is strictly shorter than the L1 TTL**. This design averts situations where stale L2 distributed entries mistakenly pollute fresh L1 caches when application nodes are restarted.
+### Supported L2 Cache Providers
+Sharpino supports multiple distributed cache backends configured via `appSettings.json`:
+- **PostgreSQL:** via `Community.Microsoft.Extensions.Caching.PostgreSql` (table `sharpino_l2_cache`).
+- **Redis:** via `Microsoft.Extensions.Caching.StackExchangeRedis`.
+- **SQL Server / Azure SQL:** via `Microsoft.Extensions.Caching.SqlServer`.
 
-### Message Backplane Synchronization
-Relying solely on an L2 cache can lead to brief windows of inconsistency between nodes. A Backplane (using Azure Service Bus, MQTT, or PostgreSQL `LISTEN`/`NOTIFY`) is implemented to broadcast immediate cache mutations (Sets/Removes).
+An important operational characteristic defined in the configuration is that the **L2 Time-to-Live (TTL) is strictly shorter than the L1 TTL** (e.g., L2 = 120–600s, L1 = 600s). This design averts situations where stale L2 distributed entries mistakenly pollute fresh L1 caches when application nodes are restarted.
 
-1. **Publishing:** When an Aggregate state is evicted (`Clean`) or a Detail is updated in the local L1 Cache, the system fires an `EntrySet` or `EntryRemove` message to the Backplane.
-2. **Receiving and Reacting:** Other nodes listening to the Backplane receive these messages and react:
-   - For `AggregateCache3`: If a node receives a removal/update notification for an aggregate from another instance, it explicitly invalidates its own local L1 cache for that aggregate.
+### Supported Backplane Providers
+A Backplane is used to broadcast immediate cache mutations across distributed instances:
+- **PostgreSQL `LISTEN / NOTIFY`:** channel `sharpino_cache_eviction` (zero external broker dependency).
+- **Redis Pub/Sub:** high-throughput distributed pub/sub.
+- **Azure Service Bus:** cloud-native enterprise messaging.
+
+### Backplane Synchronization Workflow
+1. **Publishing:** When an Aggregate state is evicted (`Clean`) or updated (`Memoize2`), the system broadcasts an `EntryRemove` or `EntrySet` message over the Backplane.
+2. **Receiving and Evicting L1:** Other nodes listening to the Backplane receive these messages and react:
+   - For `AggregateCache3`: The receiving node evicts its **local L1 memory entry** (`receiverOptions` configured with `SkipDistributedCacheWrite = true` and `SkipDistributedCacheRead = true`), ensuring L2 retains the latest serialized snapshot while the receiving node clears stale in-memory state. Subsequent reads fetch from L2 without hitting the database snapshot table.
    - **Crucially, it also automatically extracts the `AggregateId` and invokes `DetailsCache.Instance.RefreshDependentDetailsAsync(aggregateId, ct)`**.
-    
-This interconnected behavior guarantees that an action occurring on Node A will not only drop the stale aggregate on Node B but will automatically instruct Node B to eagerly rebuild or evict any locally mapped Refreshable Details linked to that Aggregate.
+   - For tests and rolling maintenance, `AggregateCache3.Instance.ClearL1()` flushes local memory without dropping distributed L2 cache.
+
+---
+
+## Summary
+
+Sharpino's caching approach gracefully addresses the unidirectional constraints of strict Event Sourcing. By combining high-speed L1/L2 multi-tier caching (`CachedAggregateEntry`) with reactive `Refreshable` Details, flexible backplane providers (PostgreSQL Notify, Redis Pub/Sub, Azure Service Bus), and read-through snapshot acceleration in `StateView`, it guarantees sub-microsecond in-memory performance alongside robust multi-node consistency.
