@@ -48,6 +48,21 @@ This sets up a minimal project template including a docker-compose configuration
    ```ini
    DATABASE_URL=postgres://username:password@localhost:5432/db_name?sslmode=disable
    ```
+
+### Dual Connection Support (Read/Write DB Separation)
+
+Starting in version 6.2.6+, Sharpino supports distinct connection strings for writes and reads to allow physical separation between the primary write database and read replicas:
+
+```ini
+# Primary database for mutations (appending events, snapshots)
+DATABASE_URL=postgres://primary_user:secret@primary-db:5432/events_db?sslmode=disable
+
+# Read replica database for queries, replaying streams, and hydrating state views
+DATABASE_READ_URL=postgres://replica_user:secret@replica-db:5432/events_db?sslmode=disable
+```
+
+When `DATABASE_READ_URL` is omitted, Sharpino defaults both read and write operations to `DATABASE_URL`.
+
 3. **Run Migrations:** Run the migration tool:
    ```bash
    dbmate up

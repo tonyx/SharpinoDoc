@@ -164,3 +164,5 @@ A Backplane is used to broadcast immediate cache mutations across distributed in
 ## Summary
 
 Sharpino's caching approach gracefully addresses the unidirectional constraints of strict Event Sourcing. By combining high-speed L1/L2 multi-tier caching (`CachedAggregateEntry`) with reactive `Refreshable` Details, flexible backplane providers (PostgreSQL Notify, Redis Pub/Sub, Azure Service Bus), and read-through snapshot acceleration in `StateView`, it guarantees sub-microsecond in-memory performance alongside robust multi-node consistency.
+
+For high-throughput deployment strategies—including physical read/write DB separation, tenant sharding, and serverless Azure Functions controllers—see the [Scalability, Sharding & Serverless Guide](/advanced/scalability-and-sharding/).

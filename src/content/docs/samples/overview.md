@@ -45,3 +45,13 @@ Here is an overview of the key samples:
 - **Key Features:**
   - Uses PostgreSQL as the L2 cache backplane.
   - Broadcasts eviction and synchronization notifications between L1 and L2 caches using PostgreSQL `LISTEN` and `NOTIFY` commands.
+
+---
+
+## Tested Deployment: Serverless Dual-Mode Architecture
+- **Purpose:** Demonstrates a tested enterprise deployment utilizing Blazor WebAssembly, Azure Functions, and Sharpino.
+- **Key Features:**
+  - **Optional Configuration:** Seamlessly toggles between monolithic in-process services and distributed Azure Functions (.NET 10 Isolated Worker) as advanced auto-scaling controllers.
+  - **WebAssembly & JWT Authentication:** The client accesses the controller over REST, using JWT bearer tokens for authentication instead of sessions when deployed on Azure Functions.
+  - **Multi-Node State Coherence:** Distributed synchronization using PostgreSQL L2 caching and separate read/write database connections.
+  - See the full architectural overview in [Serverless Dual-Mode Architecture](/samples/serverless-azure-functions/).

@@ -9,6 +9,17 @@ This log tracks major feature updates and version milestones of the Sharpino lib
 
 ---
 
+## 6.2.x
+- **Version 6.2.7:** Updated library dependencies across all core and sample projects.
+- **Version 6.2.6:**
+  - **Physical Read/Write DB Separation:** Introduced separate `readConnection` and `writeConnection` strings in `EventStore` (`PgStorage`). Writes (appending events, snapshots) target the primary write database, while queries and state view hydrations can target read replicas for eventual consistency.
+  - **MailboxProcessor Execution:** Reintroduced `MailboxProcessor` for single-stream / aggregate commands (`#if USING_MAILBOXPROCESSOR`), providing actor-based sequential execution per aggregate.
+- **Version 6.2.5:**
+  - Integrated `AsyncKeyedLock` locker for high-concurrency keyed aggregate locks.
+  - Added configuration parameter `SemaphoreSlimLimit` to tune concurrent command throttling.
+
+---
+
 ## 6.1.x
 - **Extended Decision Boundary:** Introduces cross-aggregates constraint lambda execution (`runThreeAggregateCommandsMdAsync3`, etc.) that allows locking external streams under optimistic concurrency check.
 - Added lazy constraint variations of command runner APIs.
