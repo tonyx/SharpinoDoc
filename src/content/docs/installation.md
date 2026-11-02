@@ -73,7 +73,7 @@ runTests.sh
 To run a single project, navigate to its test folder, configure the `.env` file, and execute:
 
 ```bash
-dotnet test
+dotnet run
 ```
 
 ### RabbitMQ Integration (Optional)
