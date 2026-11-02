@@ -54,7 +54,7 @@ export default defineConfig({
 						{ label: 'Overview', slug: 'samples/overview' },
 						{ label: 'Blazor Book Library Demo', slug: 'samples/blazor-book-library' },
 						{ label: 'tit4Taxi Cooperative Demo', slug: 'samples/tit4taxi' },
-						{ label: 'QR Ordering System (Serverless)', slug: 'samples/qr-ordering-system' },
+						{ label: 'Tested Serverless Deployment', slug: 'samples/serverless-azure-functions' },
 					],
 				},
 				{
